@@ -80,6 +80,33 @@ async def get_condutor_by_cpf(cpf: str):
         raise HTTPException(status_code=500, detail=f"Erro ao buscar condutor: {str(e)}")
 
 
+@router.get("/condutor/id/{id_condutor}")
+async def get_condutor_by_id(id_condutor: int):
+    """
+    Busca condutor por ID
+    
+    Args:
+        id_condutor: ID do condutor
+        
+    Returns:
+        Dados completos do condutor
+    """
+    try:
+        condutor = db2_service.get_condutor_by_id(id_condutor)
+        
+        if not condutor:
+            raise HTTPException(status_code=404, detail="Condutor não encontrado")
+        
+        resultado = db2_service.get_dados_completos_condutor(condutor.get("CPF"))
+        return resultado
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erro ao buscar condutor: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar condutor: {str(e)}")
+
+
 @router.get("/condutor/cnh/{cnh}")
 async def get_condutor_by_cnh(cnh: str):
     """

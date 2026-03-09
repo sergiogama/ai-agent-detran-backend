@@ -151,6 +151,12 @@ class Db2Service:
         results = self.execute_query(query, (cpf,))
         return results[0] if results else None
     
+    def get_condutor_by_id(self, id_condutor: int) -> Optional[Dict]:
+        """Busca condutor por ID"""
+        query = "SELECT * FROM CONDUTORES WHERE ID_CONDUTOR = ?"
+        results = self.execute_query(query, (id_condutor,))
+        return results[0] if results else None
+    
     def get_condutor_by_cnh(self, cnh: str) -> Optional[Dict]:
         """Busca condutor por CNH"""
         query = "SELECT * FROM CONDUTORES WHERE CNH = ?"
