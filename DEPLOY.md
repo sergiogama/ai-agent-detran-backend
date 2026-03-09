@@ -92,15 +92,65 @@ ibmcloud target -r us-south -g Default
    ibmcloud ce project select --name ai-agent-detran
    ```
 
-3. **Configure as variáveis de ambiente diretamente no deploy:**
+3. **Deploy MÍNIMO (sem variáveis de ambiente):**
    
-   **IMPORTANTE:** Substitua TODOS os valores `sua-*` pelas suas credenciais reais!
-
-5. **Deploy da aplicação com variáveis de ambiente:**
+   O backend agora inicia mesmo sem configuração! Você pode fazer deploy básico e configurar depois:
+   
    ```bash
    ibmcloud ce application create \
-     --name ai-aent-detran \
-     --build-source https://github.com/sergiogama/ai-agent-detran-backend.git \
+     --name ai-agent-detran \
+     --build-source https://github.com/seu-usuario/detran-backend.git \
+     --port 8080 \
+     --min-scale 1 \
+     --max-scale 5 \
+     --cpu 1 \
+     --memory 2G \
+     --build-commit main \
+     --build-context-dir . \
+     --build-dockerfile Dockerfile
+   ```
+
+4. **Configurar variáveis de ambiente (OPCIONAL):**
+   
+   Configure apenas os serviços que você precisa usar. Cada grupo de variáveis habilita um serviço específico:
+
+   **Para habilitar Db2 (consultas ao banco):**
+   ```bash
+   ibmcloud ce application update --name ai-agent-detran \
+     --env DB2_HOSTNAME=seu-hostname.databases.appdomain.cloud \
+     --env DB2_PORT=32286 \
+     --env DB2_DATABASE=bludb \
+     --env DB2_USERNAME=seu-username \
+     --env DB2_PASSWORD=sua-senha \
+     --env DB2_SECURITY=SSL \
+     --env DB2_VERIFY_SSL=false
+   ```
+
+   **Para habilitar COS (upload de imagens):**
+   ```bash
+   ibmcloud ce application update --name ai-agent-detran \
+     --env COS_API_KEY=sua-api-key \
+     --env COS_INSTANCE_CRN=seu-crn \
+     --env COS_ENDPOINT=https://s3.br-sao.cloud-object-storage.appdomain.cloud \
+     --env COS_BUCKET_NAME=seu-bucket
+   ```
+
+   **Para habilitar Watsonx Orchestrate (chat com agente):**
+   ```bash
+   ibmcloud ce application update --name ai-agent-detran \
+     --env ORCHESTRATE_API_URL=sua-url \
+     --env ORCHESTRATE_API_KEY=sua-api-key \
+     --env ORCHESTRATE_AGENT_ID=seu-agent-id
+   ```
+
+5. **Deploy COMPLETO (com todas as variáveis):**
+   
+   Se você já tem todas as credenciais, pode configurar tudo de uma vez:
+   
+   ```bash
+   ibmcloud ce application create \
+     --name ai-agent-detran \
+     --build-source https://github.com/seu-usuario/detran-backend.git \
      --port 8080 \
      --min-scale 1 \
      --max-scale 5 \
@@ -109,11 +159,11 @@ ibmcloud target -r us-south -g Default
      --build-commit main \
      --build-context-dir . \
      --build-dockerfile Dockerfile \
-     --env DB2_HOSTNAME=1bbf73c5-d84a-4bb0-85b9-ab1a4348f4a4.c3n41cmd0nqnrk39u98g.databases.appdomain.cloud \
+     --env DB2_HOSTNAME=seu-hostname.databases.appdomain.cloud \
      --env DB2_PORT=32286 \
      --env DB2_DATABASE=bludb \
-     --env DB2_USERNAME=ytp80931 \
-     --env DB2_PASSWORD=srR0pacBaWO9DAJz \
+     --env DB2_USERNAME=seu-username \
+     --env DB2_PASSWORD=sua-senha \
      --env DB2_SECURITY=SSL \
      --env DB2_VERIFY_SSL=false \
      --env COS_API_KEY=sua-api-key \
@@ -122,10 +172,7 @@ ibmcloud target -r us-south -g Default
      --env COS_BUCKET_NAME=seu-bucket \
      --env ORCHESTRATE_API_URL=sua-url \
      --env ORCHESTRATE_API_KEY=sua-api-key \
-     --env ORCHESTRATE_AGENT_ID=seu-agent-id \
-     --env BACKEND_HOST=0.0.0.0 \
-     --env BACKEND_PORT=8080 \
-     --env BACKEND_RELOAD=false
+     --env ORCHESTRATE_AGENT_ID=seu-agent-id
    ```
 
 ### Opção 2: Deploy via Container Registry
@@ -184,23 +231,44 @@ ibmcloud target -r us-south -g Default
 
 ### 1. Obter URL da aplicação:
 ```bash
-ibmcloud ce application get --name detran-api
+ibmcloud ce application get --name ai-agent-detran
 ```
 
 ### 2. Testar health check:
 ```bash
-curl https://detran-api.xxx.us-south.codeengine.appdomain.cloud/health
+curl https://ai-agent-detran.xxx.us-south.codeengine.appdomain.cloud/health
 ```
 
-### 3. Testar API:
+**Resposta esperada:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2024-01-01T12:00:00",
+  "services": {
+    "cos": "connected",           // ou "not_configured"
+    "orchestrate": "connected",   // ou "not_configured"
+    "db2": "connected"            // ou "not_configured"
+  }
+}
+```
+
+### 3. Testar API Db2 (se configurado):
 ```bash
-curl https://detran-api.xxx.us-south.codeengine.appdomain.cloud/api/db2/health
+curl https://ai-agent-detran.xxx.us-south.codeengine.appdomain.cloud/api/db2/health
 ```
 
 ### 4. Ver logs:
 ```bash
-ibmcloud ce application logs --name detran-api
+ibmcloud ce application logs --name ai-agent-detran
 ```
+
+**O que procurar nos logs:**
+- ✅ `COS Service inicializado com sucesso` - COS configurado
+- ✅ `Orchestrate Service inicializado com sucesso` - Orchestrate configurado
+- ✅ `Db2 REST Service inicializado com sucesso` - Db2 configurado
+- ⚠️ `COS Service não configurado` - COS não disponível (normal se não configurado)
+- ⚠️ `Orchestrate Service não configurado` - Orchestrate não disponível (normal se não configurado)
+- ⚠️ `Db2 REST Service não configurado` - Db2 não disponível (normal se não configurado)
 
 ## 🔄 Atualização
 
@@ -216,20 +284,31 @@ git push
 
 ### Atualizar manualmente:
 ```bash
-ibmcloud ce application update --name detran-api \
+ibmcloud ce application update --name ai-agent-detran \
   --image us.icr.io/detran/detran-api:latest
+```
+
+### Adicionar/Atualizar variáveis de ambiente:
+```bash
+# Adicionar uma variável
+ibmcloud ce application update --name ai-agent-detran \
+  --env NOVA_VAR=valor
+
+# Remover uma variável
+ibmcloud ce application update --name ai-agent-detran \
+  --env-rm NOME_VAR
 ```
 
 ## 📊 Monitoramento
 
 ### Ver status:
 ```bash
-ibmcloud ce application get --name detran-api
+ibmcloud ce application get --name ai-agent-detran
 ```
 
 ### Ver logs em tempo real:
 ```bash
-ibmcloud ce application logs --name detran-api --follow
+ibmcloud ce application logs --name ai-agent-detran --follow
 ```
 
 ### Ver métricas:
@@ -262,16 +341,26 @@ ibmcloud ce application logs --name detran-api --follow
 ### Aplicação não inicia:
 ```bash
 # Ver logs detalhados
-ibmcloud ce application logs --name detran-api --tail 100
+ibmcloud ce application logs --name ai-agent-detran --tail 100
 
 # Verificar eventos
-ibmcloud ce application events --name detran-api
+ibmcloud ce application events --name ai-agent-detran
 ```
 
+### Erro "AttributeError: 'NoneType' object has no attribute":
+- ✅ **RESOLVIDO!** O backend agora inicia sem variáveis de ambiente
+- Configure apenas os serviços que você precisa usar
+- Verifique o `/health` para ver quais serviços estão disponíveis
+
 ### Erro de conexão com Db2:
-- Verifique credenciais no secret
+- Verifique se TODAS as variáveis Db2 estão configuradas
 - Confirme que `DB2_VERIFY_SSL=false`
 - Teste conexão via console Db2
+
+### Serviço retorna erro 503:
+- O serviço não está configurado (variáveis de ambiente ausentes)
+- Configure as variáveis necessárias para aquele serviço
+- Exemplo: Para usar `/api/upload`, configure todas as variáveis COS
 
 ### Timeout:
 - Aumente CPU/memória
