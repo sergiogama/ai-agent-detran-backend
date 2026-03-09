@@ -1,0 +1,32 @@
+# Backend Requirements - ARM64 Compatible (Apple Silicon M1/M2/M3)
+# Use this file if you're on Apple Silicon Mac
+
+# Build tools (required for Python 3.13+)
+setuptools>=69.0.0
+wheel>=0.42.0
+
+# Web Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# IBM Cloud Services - ARM Compatible (newer versions)
+ibm-cloud-sdk-core>=3.19.0
+ibm-cos-sdk>=2.13.0
+
+# Database - REST API approach
+requests>=2.31.0
+httpx>=0.26.0
+
+# Environment
+python-dotenv==1.0.0
+
+# Utilities
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# CORS & Auth
+python-jose[cryptography]>=3.3.0
+
+# Logging
+python-json-logger>=2.0.7
