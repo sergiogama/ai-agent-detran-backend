@@ -58,46 +58,37 @@ ibmcloud target -r us-south -g Default
    ibmcloud ce project select --name detran-project
    ```
 
-3. **Crie secrets para credenciais sensíveis:**
-   ```bash
-   ibmcloud ce secret create --name detran-secrets \
-     --from-literal DB2_PASSWORD=sua-senha \
-     --from-literal DB2_USERNAME=seu-usuario \
-     --from-literal COS_API_KEY=sua-api-key \
-     --from-literal ORCHESTRATE_API_KEY=sua-api-key
-   ```
+3. **Configure as variáveis de ambiente diretamente no deploy:**
+   
+   **IMPORTANTE:** Substitua TODOS os valores `sua-*` pelas suas credenciais reais!
 
-4. **Crie configmap para outras variáveis:**
-   ```bash
-   ibmcloud ce configmap create --name detran-config \
-     --from-literal DB2_HOSTNAME=seu-hostname.databases.appdomain.cloud \
-     --from-literal DB2_PORT=32286 \
-     --from-literal DB2_DATABASE=bludb \
-     --from-literal DB2_SECURITY=SSL \
-     --from-literal DB2_VERIFY_SSL=false \
-     --from-literal COS_ENDPOINT=https://s3.br-sao.cloud-object-storage.appdomain.cloud \
-     --from-literal COS_BUCKET_NAME=seu-bucket \
-     --from-literal COS_INSTANCE_CRN=seu-crn \
-     --from-literal ORCHESTRATE_API_URL=sua-url \
-     --from-literal ORCHESTRATE_AGENT_ID=seu-agent-id \
-     --from-literal BACKEND_HOST=0.0.0.0 \
-     --from-literal BACKEND_PORT=8080 \
-     --from-literal BACKEND_RELOAD=false
-   ```
-
-5. **Deploy da aplicação:**
+5. **Deploy da aplicação com variáveis de ambiente:**
    ```bash
    ibmcloud ce application create \
      --name detran-api \
      --build-source https://github.com/seu-usuario/detran-backend \
-     --build-context-dir backend \
      --port 8080 \
      --min-scale 1 \
      --max-scale 5 \
      --cpu 1 \
      --memory 2G \
-     --env-from-configmap detran-config \
-     --env-from-secret detran-secrets
+     --env DB2_HOSTNAME=seu-hostname.databases.appdomain.cloud \
+     --env DB2_PORT=32286 \
+     --env DB2_DATABASE=bludb \
+     --env DB2_USERNAME=seu-usuario \
+     --env DB2_PASSWORD=sua-senha \
+     --env DB2_SECURITY=SSL \
+     --env DB2_VERIFY_SSL=false \
+     --env COS_API_KEY=sua-api-key \
+     --env COS_INSTANCE_CRN=seu-crn \
+     --env COS_ENDPOINT=https://s3.br-sao.cloud-object-storage.appdomain.cloud \
+     --env COS_BUCKET_NAME=seu-bucket \
+     --env ORCHESTRATE_API_URL=sua-url \
+     --env ORCHESTRATE_API_KEY=sua-api-key \
+     --env ORCHESTRATE_AGENT_ID=seu-agent-id \
+     --env BACKEND_HOST=0.0.0.0 \
+     --env BACKEND_PORT=8080 \
+     --env BACKEND_RELOAD=false
    ```
 
 ### Opção 2: Deploy via Container Registry
