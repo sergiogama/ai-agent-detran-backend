@@ -34,7 +34,41 @@ ibmcloud plugin install code-engine
 ### 3. Login no IBM Cloud
 
 ```bash
+# Login com SSO
 ibmcloud login --sso
+
+# Se você tem múltiplas contas, liste-as
+ibmcloud account list
+
+# Selecione a conta específica (substitua ACCOUNT_ID pelo ID da sua conta)
+ibmcloud target -c 2947177 # ou 1a9b6695641d440ab608e91ee889281f ou itz-watsonx-028
+
+# Ou selecione por nome da conta
+ibmcloud target -c "itz-watsonx-028"
+
+# Depois, selecione região e resource group
+ibmcloud target -r us-south -g Default
+
+# Verificar configuração atual
+ibmcloud target
+```
+
+**Exemplo com múltiplas contas:**
+```bash
+# 1. Login
+ibmcloud login --sso
+
+# 2. Listar contas disponíveis
+ibmcloud account list
+# Output:
+# Account GUID                          Name                    State
+# abc123...                             Minha Conta Pessoal     ACTIVE
+# def456...                             Empresa XYZ             ACTIVE
+
+# 3. Selecionar conta específica
+ibmcloud target -c abc123...
+
+# 4. Selecionar região e resource group
 ibmcloud target -r us-south -g Default
 ```
 
@@ -54,8 +88,8 @@ ibmcloud target -r us-south -g Default
 
 2. **Crie o projeto no Code Engine:**
    ```bash
-   ibmcloud ce project create --name detran-project
-   ibmcloud ce project select --name detran-project
+   ibmcloud ce project create --name ai-agent-detran
+   ibmcloud ce project select --name ai-agent-detran
    ```
 
 3. **Configure as variáveis de ambiente diretamente no deploy:**
@@ -65,18 +99,21 @@ ibmcloud target -r us-south -g Default
 5. **Deploy da aplicação com variáveis de ambiente:**
    ```bash
    ibmcloud ce application create \
-     --name detran-api \
-     --build-source https://github.com/seu-usuario/detran-backend \
+     --name ai-aent-detran \
+     --build-source https://github.com/sergiogama/ai-agent-detran-backend.git \
      --port 8080 \
      --min-scale 1 \
      --max-scale 5 \
      --cpu 1 \
      --memory 2G \
-     --env DB2_HOSTNAME=seu-hostname.databases.appdomain.cloud \
+     --build-commit main \
+     --build-context-dir . \
+     --build-dockerfile Dockerfile \
+     --env DB2_HOSTNAME=1bbf73c5-d84a-4bb0-85b9-ab1a4348f4a4.c3n41cmd0nqnrk39u98g.databases.appdomain.cloud \
      --env DB2_PORT=32286 \
      --env DB2_DATABASE=bludb \
-     --env DB2_USERNAME=seu-usuario \
-     --env DB2_PASSWORD=sua-senha \
+     --env DB2_USERNAME=ytp80931 \
+     --env DB2_PASSWORD=srR0pacBaWO9DAJz \
      --env DB2_SECURITY=SSL \
      --env DB2_VERIFY_SSL=false \
      --env COS_API_KEY=sua-api-key \
