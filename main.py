@@ -98,6 +98,22 @@ if all([settings.db2_hostname, settings.db2_database, settings.db2_username, set
 else:
     logger.warning("Db2 REST Service não configurado - variáveis de ambiente ausentes")
 
+# Inicializar Auth Service com Db2 REST
+auth_service_instance = None
+if db2_service:
+    try:
+        from services.auth_service_rest import AuthServiceRest
+        auth_service_instance = AuthServiceRest(db2_service_rest=db2_service)
+        logger.info("Auth Service REST inicializado com sucesso")
+        
+        # Injetar no módulo auth_routes
+        import api.auth_routes as auth_routes_module
+        auth_routes_module.auth_service = auth_service_instance
+    except Exception as e:
+        logger.warning(f"Não foi possível inicializar Auth Service REST: {e}")
+else:
+    logger.warning("Auth Service não configurado - Db2 Service não disponível")
+
 # Incluir routers
 app.include_router(db2_router)
 app.include_router(auth_router)
