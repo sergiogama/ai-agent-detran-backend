@@ -21,6 +21,8 @@ from models import (
 )
 from services import COSService, OrchestrateService, Db2ServiceRest
 from api import db2_router
+from api.auth_routes import router as auth_router
+from api.chat_routes import router as chat_router
 
 # Configurar logging
 logging.basicConfig(
@@ -98,6 +100,8 @@ else:
 
 # Incluir routers
 app.include_router(db2_router)
+app.include_router(auth_router)
+app.include_router(chat_router)
 
 
 @app.get("/", response_model=dict)
