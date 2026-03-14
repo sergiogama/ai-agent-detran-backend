@@ -8,18 +8,11 @@ from pydantic import BaseModel
 from typing import Optional
 import logging
 
-# Importar ambos os serviços
-try:
-    from services.auth_service import AuthService
-    auth_service = AuthService()
-    logger = logging.getLogger(__name__)
-    logger.info("Usando AuthService com driver nativo")
-except Exception as e:
-    # Fallback para REST API se driver nativo falhar
-    from services.auth_service_rest import AuthServiceRest
-    auth_service = None  # Será inicializado no main.py
-    logger = logging.getLogger(__name__)
-    logger.warning(f"Driver nativo não disponível, usando REST API: {e}")
+# Usar apenas AuthServiceRest (mais compatível)
+from services.auth_service_rest import AuthServiceRest
+
+logger = logging.getLogger(__name__)
+auth_service = None  # Será inicializado no main.py com db2_service_rest
 
 router = APIRouter(prefix="/api/auth", tags=["Autenticação"])
 

@@ -17,10 +17,18 @@ conversations = {}
 class ChatService:
     """Serviço de chat com o agente Detran"""
 
-    def __init__(self):
-        # TODO: Inicializar cliente do watsonx Orchestrate
-        # self.orchestrate_client = OrchestrateCl ient(...)
-        pass
+    def __init__(self, orchestrate_service=None):
+        """
+        Inicializa o serviço de chat
+        
+        Args:
+            orchestrate_service: Instância do OrchestrateService (opcional)
+        """
+        self.orchestrate_service = orchestrate_service
+        if orchestrate_service:
+            logger.info("ChatService inicializado com OrchestrateService")
+        else:
+            logger.warning("ChatService inicializado sem OrchestrateService - usando respostas simuladas")
 
     def create_conversation(self, user_cpf: str) -> str:
         """
@@ -75,15 +83,41 @@ class ChatService:
             }
             conversations[conversation_id]["messages"].append(user_message)
 
-            # TODO: Enviar mensagem para o agente via watsonx Orchestrate
-            # response = self.orchestrate_client.send_message(
-            #     agent_id="Detran_Agent",
-            #     message=message,
-            #     conversation_id=conversation_id
-            # )
-
-            # Resposta simulada (substituir pela chamada real ao agente)
-            agent_response = self._simulate_agent_response(message)
+            # Enviar mensagem para o agente via watsonx Orchestrate
+            if self.orchestrate_service:
+                try:
+                    logger.info(f"Enviando mensagem para Orchestrate: {message[:50]}...")
+                    
+                    # Obter ou criar thread_id do Orchestrate
+                    orchestrate_thread_id = conversations[conversation_id].get("orchestrate_thread_id")
+                    
+                    # Adicionar contexto do usuário
+                    context = {
+                        "user_cpf": user_cpf or conversations[conversation_id]["user_cpf"],
+                        "conversation_id": conversation_id
+                    }
+                    
+                    orchestrate_response = self.orchestrate_service.send_message(
+                        message=message,
+                        session_id=orchestrate_thread_id,
+                        context=context
+                    )
+                    
+                    # Salvar thread_id retornado pelo Orchestrate
+                    if orchestrate_response.get("session_id"):
+                        conversations[conversation_id]["orchestrate_thread_id"] = orchestrate_response["session_id"]
+                        logger.info(f"Thread ID salvo: {orchestrate_response['session_id']}")
+                    
+                    agent_response = orchestrate_response.get("message", "Desculpe, não consegui processar sua mensagem.")
+                    logger.info(f"Resposta recebida do Orchestrate: {agent_response[:50]}...")
+                    
+                except Exception as e:
+                    logger.error(f"Erro ao chamar Orchestrate: {str(e)}")
+                    agent_response = f"Desculpe, ocorreu um erro ao processar sua mensagem. Por favor, tente novamente."
+            else:
+                # Fallback para resposta simulada se Orchestrate não disponível
+                logger.warning("Orchestrate não disponível, usando resposta simulada")
+                agent_response = self._simulate_agent_response(message)
 
             # Adiciona resposta do agente ao histórico
             assistant_message = {

@@ -9,14 +9,13 @@ from typing import Optional
 import logging
 
 from services.chat_service import ChatService
-from services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
 
-# Instâncias dos serviços
-chat_service = ChatService()
-auth_service = AuthService()
+# Instâncias dos serviços (serão injetadas pelo main.py)
+chat_service = None
+auth_service = None
 
 
 class MessageRequest(BaseModel):

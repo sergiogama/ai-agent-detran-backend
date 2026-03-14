@@ -1,6 +1,6 @@
 """
-Serviço de Autenticação usando REST API
-Gerencia login e validação de usuários usando Db2ServiceRest
+Serviço de Autenticação
+Gerencia login e validação de usuários usando Db2Service (driver nativo)
 """
 
 import jwt
@@ -22,17 +22,17 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 480  # 8 horas
 
 
 class AuthServiceRest:
-    """Serviço de autenticação de usuários usando REST API"""
+    """Serviço de autenticação de usuários"""
 
-    def __init__(self, db2_service_rest=None):
+    def __init__(self, db2_service=None):
         """
         Inicializa o serviço de autenticação
         
         Args:
-            db2_service_rest: Instância do Db2ServiceRest (opcional)
+            db2_service: Instância do Db2Service (driver nativo)
         """
-        if db2_service_rest:
-            self.db2_service = db2_service_rest
+        if db2_service:
+            self.db2_service = db2_service
         else:
             # Será injetado pelo main.py
             self.db2_service = None

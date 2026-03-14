@@ -3,7 +3,9 @@ Serviço para IBM Watsonx Orchestrate
 """
 import requests
 import logging
+import json
 from typing import Dict, List, Optional
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -22,54 +24,66 @@ class OrchestrateService:
         
         Args:
             api_url: URL base da API do Watsonx Orchestrate
-            api_key: API Key para autenticação
+            api_key: API Key para autenticação IAM
             agent_id: ID do agente a ser usado
         """
         self.api_url = api_url.rstrip('/')
         self.api_key = api_key
         self.agent_id = agent_id
-        self.session_id = None
+        self.access_token = None
+        self.token_expiry = None
         
         logger.info(f"Orchestrate Service inicializado para agente: {agent_id}")
     
+    def _get_iam_token(self) -> str:
+        """
+        Obtém token de acesso IAM usando a API key
+        
+        Returns:
+            Token de acesso IAM
+        """
+        try:
+            # Verificar se token ainda é válido
+            if self.access_token and self.token_expiry:
+                if datetime.now() < self.token_expiry:
+                    return self.access_token
+            
+            # Obter novo token
+            url = "https://iam.cloud.ibm.com/identity/token"
+            headers = {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json"
+            }
+            data = {
+                "grant_type": "urn:ibm:params:oauth:grant-type:apikey",
+                "apikey": self.api_key
+            }
+            
+            response = requests.post(url, headers=headers, data=data, timeout=30)
+            response.raise_for_status()
+            
+            token_data = response.json()
+            self.access_token = token_data["access_token"]
+            
+            # Token expira em 1 hora, renovar 5 minutos antes
+            expires_in = token_data.get("expires_in", 3600)
+            self.token_expiry = datetime.now() + timedelta(seconds=expires_in - 300)
+            
+            logger.info("Token IAM obtido com sucesso")
+            return self.access_token
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Erro ao obter token IAM: {str(e)}")
+            raise Exception(f"Falha ao obter token IAM: {str(e)}")
+    
     def _get_headers(self) -> Dict[str, str]:
         """Retorna os headers para as requisições"""
+        token = self._get_iam_token()
         return {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
-    
-    def create_session(self) -> str:
-        """
-        Cria uma nova sessão de conversa
-        
-        Returns:
-            ID da sessão criada
-        """
-        try:
-            url = f"{self.api_url}/sessions"
-            payload = {
-                "agent_id": self.agent_id
-            }
-            
-            response = requests.post(
-                url,
-                json=payload,
-                headers=self._get_headers(),
-                timeout=30
-            )
-            response.raise_for_status()
-            
-            data = response.json()
-            self.session_id = data.get("session_id")
-            
-            logger.info(f"Sessão criada: {self.session_id}")
-            return self.session_id
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Erro ao criar sessão: {str(e)}")
-            raise Exception(f"Falha ao criar sessão: {str(e)}")
     
     def send_message(
         self,
@@ -78,53 +92,129 @@ class OrchestrateService:
         context: Optional[Dict] = None
     ) -> Dict:
         """
-        Envia uma mensagem para o agente
+        Envia uma mensagem para o agente usando a API /v1/orchestrate/runs com streaming
         
         Args:
             message: Mensagem do usuário
-            session_id: ID da sessão (opcional, usa a sessão atual se não fornecido)
+            session_id: ID da thread/conversa (opcional)
             context: Contexto adicional (opcional)
             
         Returns:
             Resposta do agente
         """
         try:
-            # Usar sessão fornecida ou criar nova
-            if not session_id:
-                if not self.session_id:
-                    self.create_session()
-                session_id = self.session_id
+            url = f"{self.api_url}/v1/orchestrate/runs?stream=true"
             
-            url = f"{self.api_url}/sessions/{session_id}/messages"
+            # Construir payload conforme documentação
             payload = {
-                "message": message,
-                "agent_id": self.agent_id
+                "agent_id": self.agent_id,
+                "message": {
+                    "role": "user",
+                    "content": [
+                        {
+                            "response_type": "text",
+                            "text": message
+                        }
+                    ]
+                }
             }
             
-            if context:
-                payload["context"] = context
+            # Adicionar thread_id se fornecido
+            if session_id:
+                payload["thread_id"] = session_id
+            
+            # Adicionar contexto do usuário se fornecido
+            if context and "user_cpf" in context:
+                user_cpf = context["user_cpf"]
+                # Incluir CPF no contexto da mensagem
+                original_text = payload["message"]["content"][0]["text"]
+                payload["message"]["content"][0]["text"] = f"[Usuário CPF: {user_cpf}] {original_text}"
+                logger.info(f"CPF do usuário adicionado ao contexto: {user_cpf}")
+            
+            logger.info(f"Enviando mensagem para Orchestrate com streaming: {message[:50]}...")
+            logger.info(f"Agent ID: {self.agent_id}")
             
             response = requests.post(
                 url,
                 json=payload,
                 headers=self._get_headers(),
-                timeout=60
+                timeout=60,
+                stream=True
             )
+            
+            logger.info(f"Status da resposta: {response.status_code}")
             response.raise_for_status()
             
-            data = response.json()
-            logger.info(f"Mensagem enviada com sucesso para sessão: {session_id}")
+            # Processar resposta em streaming (JSON lines)
+            agent_message = ""
+            thread_id = session_id
+            
+            for line in response.iter_lines():
+                if line:
+                    line_str = line.decode('utf-8')
+                    try:
+                        data = json.loads(line_str)
+                        event_type = data.get("event")
+                        event_data = data.get("data", {})
+                        
+                        # Extrair thread_id
+                        if "thread_id" in event_data:
+                            thread_id = event_data["thread_id"]
+                        
+                        # Processar eventos
+                        if event_type == "message.delta":
+                            # Acumular deltas de mensagem
+                            delta = event_data.get("delta", "")
+                            # Delta pode ser string ou dict com estrutura complexa
+                            if isinstance(delta, str):
+                                agent_message += delta
+                            elif isinstance(delta, dict):
+                                # Extrair texto de estrutura: {'role': 'assistant', 'content': [{'text': '...'}]}
+                                if "content" in delta and isinstance(delta["content"], list) and len(delta["content"]) > 0:
+                                    content_item = delta["content"][0]
+                                    if "text" in content_item:
+                                        agent_message += content_item["text"]
+                            
+                        elif event_type == "done":
+                            # Fim do streaming
+                            logger.info("Streaming concluído")
+                            break
+                            
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Erro ao decodificar JSON: {e}, linha: {line_str[:100]}")
+            
+            if not agent_message:
+                logger.warning("Nenhuma mensagem recebida do streaming")
+                agent_message = "Desculpe, não recebi resposta do agente."
+            
+            logger.info(f"Mensagem recebida com sucesso. Thread ID: {thread_id}")
+            logger.info(f"Resposta: {agent_message[:100]}...")
             
             return {
-                "session_id": session_id,
-                "message": data.get("response", ""),
-                "metadata": data.get("metadata", {}),
-                "timestamp": data.get("timestamp")
+                "session_id": thread_id,
+                "message": agent_message,
+                "metadata": {},
+                "timestamp": datetime.now().isoformat()
             }
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Erro ao enviar mensagem: {str(e)}")
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"Resposta do servidor: {e.response.text}")
             raise Exception(f"Falha ao enviar mensagem: {str(e)}")
+    
+    def create_session(self) -> str:
+        """
+        Cria uma nova sessão/thread
+        Na API v1/orchestrate/runs, o thread_id é criado automaticamente
+        na primeira mensagem se não for fornecido
+        
+        Returns:
+            ID da sessão (None para criar automaticamente)
+        """
+        # A API cria automaticamente um thread_id na primeira mensagem
+        logger.info("Thread será criado automaticamente na primeira mensagem")
+        return None
     
     def get_conversation_history(
         self,
@@ -132,71 +222,30 @@ class OrchestrateService:
     ) -> List[Dict]:
         """
         Obtém o histórico de conversa de uma sessão
+        Nota: Esta funcionalidade pode não estar disponível na API v1/orchestrate/runs
         
         Args:
-            session_id: ID da sessão (opcional, usa a sessão atual se não fornecido)
+            session_id: ID da sessão
             
         Returns:
             Lista de mensagens da conversa
         """
-        try:
-            if not session_id:
-                session_id = self.session_id
-            
-            if not session_id:
-                raise Exception("Nenhuma sessão ativa")
-            
-            url = f"{self.api_url}/sessions/{session_id}/history"
-            
-            response = requests.get(
-                url,
-                headers=self._get_headers(),
-                timeout=30
-            )
-            response.raise_for_status()
-            
-            data = response.json()
-            return data.get("messages", [])
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Erro ao obter histórico: {str(e)}")
-            raise Exception(f"Falha ao obter histórico: {str(e)}")
+        logger.warning("get_conversation_history não implementado para API v1/orchestrate/runs")
+        return []
     
     def delete_session(self, session_id: Optional[str] = None) -> bool:
         """
         Deleta uma sessão
+        Nota: Esta funcionalidade pode não estar disponível na API v1/orchestrate/runs
         
         Args:
-            session_id: ID da sessão (opcional, usa a sessão atual se não fornecido)
+            session_id: ID da sessão
             
         Returns:
             True se deletada com sucesso
         """
-        try:
-            if not session_id:
-                session_id = self.session_id
-            
-            if not session_id:
-                return False
-            
-            url = f"{self.api_url}/sessions/{session_id}"
-            
-            response = requests.delete(
-                url,
-                headers=self._get_headers(),
-                timeout=30
-            )
-            response.raise_for_status()
-            
-            if session_id == self.session_id:
-                self.session_id = None
-            
-            logger.info(f"Sessão deletada: {session_id}")
-            return True
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Erro ao deletar sessão: {str(e)}")
-            return False
+        logger.warning("delete_session não implementado para API v1/orchestrate/runs")
+        return True
     
     def chat(
         self,
@@ -217,4 +266,4 @@ class OrchestrateService:
         if cnh_image_url:
             context["cnh_image_url"] = cnh_image_url
         
-        return self.send_message(message, context=context)
+        return self.send_message(message, context=context if context else None)

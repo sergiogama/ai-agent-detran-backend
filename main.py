@@ -20,6 +20,7 @@ from models import (
     ErrorResponse
 )
 from services import COSService, OrchestrateService, Db2ServiceRest
+from services.db2_service import Db2Service
 from api import db2_router
 from api.auth_routes import router as auth_router
 from api.chat_routes import router as chat_router
@@ -98,21 +99,39 @@ if all([settings.db2_hostname, settings.db2_database, settings.db2_username, set
 else:
     logger.warning("Db2 REST Service não configurado - variáveis de ambiente ausentes")
 
-# Inicializar Auth Service com Db2 REST
+# Inicializar Auth Service com Db2 nativo (do db2_router)
 auth_service_instance = None
-if db2_service:
-    try:
-        from services.auth_service_rest import AuthServiceRest
-        auth_service_instance = AuthServiceRest(db2_service_rest=db2_service)
-        logger.info("Auth Service REST inicializado com sucesso")
-        
-        # Injetar no módulo auth_routes
-        import api.auth_routes as auth_routes_module
-        auth_routes_module.auth_service = auth_service_instance
-    except Exception as e:
-        logger.warning(f"Não foi possível inicializar Auth Service REST: {e}")
-else:
-    logger.warning("Auth Service não configurado - Db2 Service não disponível")
+try:
+    from services.auth_service_rest import AuthServiceRest
+    from api.db2_routes import db2_service as db2_native_service
+    
+    auth_service_instance = AuthServiceRest(db2_service=db2_native_service)
+    logger.info("Auth Service inicializado com Db2 nativo")
+    
+    # Injetar no módulo auth_routes
+    import api.auth_routes as auth_routes_module
+    auth_routes_module.auth_service = auth_service_instance
+except Exception as e:
+    logger.warning(f"Não foi possível inicializar Auth Service: {e}")
+
+# Inicializar Chat Service com Orchestrate
+chat_service_instance = None
+try:
+    from services.chat_service import ChatService
+    
+    if orchestrate_service:
+        chat_service_instance = ChatService(orchestrate_service=orchestrate_service)
+        logger.info("Chat Service inicializado com OrchestrateService")
+    else:
+        chat_service_instance = ChatService()
+        logger.warning("Chat Service inicializado sem OrchestrateService - usando respostas simuladas")
+    
+    # Injetar no módulo chat_routes
+    import api.chat_routes as chat_routes_module
+    chat_routes_module.chat_service = chat_service_instance
+    chat_routes_module.auth_service = auth_service_instance
+except Exception as e:
+    logger.warning(f"Não foi possível inicializar Chat Service: {e}")
 
 # Incluir routers
 app.include_router(db2_router)
