@@ -175,6 +175,16 @@ class OrchestrateService:
                     # Tentar parsear como JSON
                     try:
                         data = json.loads(line)
+                        
+                        # Caso 1: Resposta direta do Watsonx (sem envelope de evento)
+                        if "role" in data and "content" in data:
+                            logger.info(f"✅ Resposta direta do Watsonx detectada")
+                            agent_message = data["content"]
+                            logger.info(f"✅ Mensagem extraída: {agent_message[:100]}...")
+                            done_received = True
+                            break
+                        
+                        # Caso 2: Formato de evento SSE
                         event_type = data.get("event")
                         event_data = data.get("data", {})
                         
