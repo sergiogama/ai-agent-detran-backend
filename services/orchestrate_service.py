@@ -93,44 +93,36 @@ class OrchestrateService:
         context: Optional[Dict] = None
     ) -> Dict:
         """
-        Envia uma mensagem para o agente usando a API /api/v1/orchestrate/{agent_id}/chat/completions
+        Envia uma mensagem para o agente usando a API /v1/orchestrate/runs com streaming
         
         Args:
             message: Mensagem do usuário
-            session_id: ID da sessão/conversa (opcional)
+            session_id: ID da thread/conversa (opcional)
             context: Contexto adicional (opcional)
             
         Returns:
             Resposta do agente
         """
         try:
-            url = f"{self.api_url}/api/v1/orchestrate/{self.agent_id}/chat/completions"
+            url = f"{self.api_url}/v1/orchestrate/runs?stream=true"
             
             # Construir payload conforme documentação
             payload = {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "response_type": "text",
-                                "text": message
-                            }
-                        ]
-                    }
-                ],
-                "stream": True
+                "agent_id": self.agent_id,
+                "message": {
+                    "role": "user",
+                    "content": [
+                        {
+                            "response_type": "text",
+                            "text": message
+                        }
+                    ]
+                }
             }
             
-            # Adicionar contexto se fornecido
-            if context:
-                payload["context"] = context
-            
-            # Session ID é gerenciado automaticamente pela API
+            # Adicionar thread_id se fornecido
             if session_id:
-                if "context" not in payload:
-                    payload["context"] = {}
-                payload["context"]["session_id"] = session_id
+                payload["thread_id"] = session_id
             
             # Log do CPF do usuário (sem modificar a mensagem)
             if context and "user_cpf" in context:
