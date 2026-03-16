@@ -132,11 +132,13 @@ class OrchestrateService:
             logger.info(f"Enviando mensagem para Orchestrate com streaming: {message[:50]}...")
             logger.info(f"Agent ID: {self.agent_id}")
             
+            # Timeout maior para ambientes serverless (cold start pode levar 60s+)
+            # Code Engine: cold start ~50-60s + processamento ~10-30s = 180s total
             response = requests.post(
                 url,
                 json=payload,
                 headers=self._get_headers(),
-                timeout=120,
+                timeout=180,  # 3 minutos para cold start + processamento
                 stream=True
             )
             
@@ -148,7 +150,7 @@ class OrchestrateService:
             thread_id = session_id
             done_received = False
             last_data_time = time.time()
-            idle_timeout = 150
+            idle_timeout = 200  # 200s para tolerar cold start em serverless
             line_count = 0
             
             logger.info("🚀 Iniciando processamento do streaming...")
