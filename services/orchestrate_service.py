@@ -123,13 +123,10 @@ class OrchestrateService:
             if session_id:
                 payload["thread_id"] = session_id
             
-            # Adicionar contexto do usuário se fornecido
+            # Log do CPF do usuário (sem modificar a mensagem)
             if context and "user_cpf" in context:
                 user_cpf = context["user_cpf"]
-                # Incluir CPF no contexto da mensagem
-                original_text = payload["message"]["content"][0]["text"]
-                payload["message"]["content"][0]["text"] = f"[Usuário CPF: {user_cpf}] {original_text}"
-                logger.info(f"CPF do usuário adicionado ao contexto: {user_cpf}")
+                logger.info(f"Mensagem enviada pelo usuário CPF: {user_cpf}")
             
             logger.info(f"Enviando mensagem para Orchestrate com streaming: {message[:50]}...")
             logger.info(f"Agent ID: {self.agent_id}")
@@ -203,7 +200,7 @@ class OrchestrateService:
                 logger.error(f"Resposta do servidor: {e.response.text}")
             raise Exception(f"Falha ao enviar mensagem: {str(e)}")
     
-    def create_session(self) -> str:
+    def create_session(self) -> Optional[str]:
         """
         Cria uma nova sessão/thread
         Na API v1/orchestrate/runs, o thread_id é criado automaticamente
