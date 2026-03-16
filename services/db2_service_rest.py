@@ -48,25 +48,37 @@ class Db2ServiceRest:
         self.security = security
         self.verify_ssl = verify_ssl
         
-        # Base URL para API REST do Db2 on Cloud
-        # IBM Cloud Db2 usa apenas o hostname (porta já incluída no hostname)
-        self.base_url = f"https://{hostname}/dbapi/v5"
+        # IBM Db2 on Cloud REST API v4
+        # Documentação: https://cloud.ibm.com/apidocs/db2-on-cloud/db2-on-cloud-v4
+        # REST API usa porta 443 (HTTPS padrão), não a porta 32286 (que é para conexão nativa)
+        self.base_url = f"https://{hostname}/dbapi/v4"
         
-        # Credenciais em base64
+        # Deployment ID (obrigatório no header X-Deployment-Id)
+        self.deployment_id = database
+        
+        # Gerar Bearer token (IBM Cloud usa IAM token ou API key)
+        # Por enquanto, vamos tentar Basic Auth primeiro
         credentials = f"{username}:{password}"
         self.auth_header = base64.b64encode(credentials.encode()).decode()
+        self.bearer_token = None  # Será obtido via IAM se necessário
         
         logger.info(f"Db2 REST Service inicializado para database: {database}")
-        logger.info(f"Base URL: {self.base_url}")
+        logger.info(f"Base URL (REST API): {self.base_url}")
+        logger.info(f"Porta nativa (não usada pela REST API): {port}")
         if not self.verify_ssl:
             logger.warning("SSL certificate verification is DISABLED. This is not recommended for production environments.")
     
     def _get_headers(self) -> Dict[str, str]:
-        """Retorna headers para requisições"""
+        """
+        Retorna headers para requisições
+        Documentação oficial: https://cloud.ibm.com/apidocs/db2-on-cloud/db2-on-cloud-v4
+        Requer: Bearer token + x-deployment-id (lowercase)
+        """
         return {
             "Authorization": f"Basic {self.auth_header}",
             "Content-Type": "application/json",
-            "Accept": "application/json"
+            "Accept": "application/json",
+            "x-deployment-id": self.database  # Obrigatório (lowercase conforme documentação)
         }
     
     def execute_query(self, query: str) -> List[Dict]:
@@ -80,7 +92,11 @@ class Db2ServiceRest:
             Lista de dicionários com os resultados
         """
         try:
+            # Endpoint correto segundo documentação v4
             url = f"{self.base_url}/sql_jobs"
+            
+            logger.info(f"🔄 Executando query via DB2 on Cloud v4 API")
+            logger.info(f"📍 URL: {url}")
             
             payload = {
                 "commands": query,

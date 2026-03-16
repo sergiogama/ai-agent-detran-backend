@@ -143,148 +143,147 @@ class OrchestrateService:
             logger.info(f"Status da resposta: {response.status_code}")
             response.raise_for_status()
             
-            # Processar resposta em streaming (Server-Sent Events - SSE)
+            # Processar resposta em streaming
             agent_message = ""
             thread_id = session_id
             done_received = False
             last_data_time = time.time()
             idle_timeout = 150
+            line_count = 0
             
-            logger.info("Iniciando processamento do streaming SSE...")
-            
-            current_event = None
-            current_data = ""
+            logger.info("🚀 Iniciando processamento do streaming...")
             
             try:
                 for line in response.iter_lines(decode_unicode=True):
+                    line_count += 1
+                    
                     # Verificar timeout de inatividade
                     if time.time() - last_data_time > idle_timeout:
-                        logger.warning(f"Timeout de inatividade ({idle_timeout}s) - finalizando streaming")
+                        logger.warning(f"⏱️ Timeout de inatividade ({idle_timeout}s) - finalizando streaming")
                         break
                     
                     if not line or line.strip() == "":
-                        # Linha vazia indica fim de um evento SSE
-                        if current_event and current_data:
-                            try:
-                                event_data = json.loads(current_data) if current_data else {}
-                                logger.info(f"Evento SSE: {current_event}, dados: {str(event_data)[:200]}")
-                                
-                                # Extrair thread_id
-                                if "thread_id" in event_data:
-                                    thread_id = event_data["thread_id"]
-                                
-                                # Processar baseado no tipo de evento
-                                if current_event == "message.delta":
-                                    delta = event_data.get("delta", "")
-                                    if isinstance(delta, str):
-                                        agent_message += delta
-                                    elif isinstance(delta, dict) and "content" in delta:
-                                        if isinstance(delta["content"], list):
-                                            for item in delta["content"]:
-                                                if isinstance(item, dict) and "text" in item:
-                                                    agent_message += item["text"]
-                                
-                                elif current_event in ["message.complete", "answer"]:
-                                    if "message" in event_data:
-                                        msg = event_data["message"]
-                                        if isinstance(msg, str):
-                                            agent_message = msg
-                                        elif isinstance(msg, dict) and "content" in msg:
-                                            if isinstance(msg["content"], str):
-                                                agent_message = msg["content"]
-                                            elif isinstance(msg["content"], list):
-                                                for item in msg["content"]:
-                                                    if isinstance(item, dict) and "text" in item:
-                                                        agent_message += item["text"]
-                                
-                                elif current_event == "done":
-                                    logger.info("Evento 'done' recebido - streaming concluído")
-                                    done_received = True
-                                    break
-                                
-                                elif current_event == "error":
-                                    error_msg = event_data.get("error", "Erro desconhecido")
-                                    logger.error(f"Erro no streaming: {error_msg}")
-                                    raise Exception(f"Erro do agente: {error_msg}")
-                                    
-                            except json.JSONDecodeError as e:
-                                logger.warning(f"Erro ao decodificar dados do evento: {e}")
-                            
-                            current_event = None
-                            current_data = ""
                         continue
                     
                     last_data_time = time.time()
                     line = line.strip()
                     
-                    if line.startswith("event:"):
-                        current_event = line[6:].strip()
-                    elif line.startswith("data:"):
-                        current_data = line[5:].strip()
-                    else:
-                        # Formato alternativo: JSON direto
-                        try:
-                            data = json.loads(line)
-                            event_type = data.get("event")
-                            event_data = data.get("data", {})
-                            
-                            logger.info(f"Evento JSON: {event_type}, dados: {str(event_data)[:200]}")
-                            
-                            if "thread_id" in event_data:
-                                thread_id = event_data["thread_id"]
-                            
-                            if event_type == "message.delta":
-                                delta = event_data.get("delta", "")
-                                if isinstance(delta, str):
-                                    agent_message += delta
-                                elif isinstance(delta, dict) and "content" in delta:
+                    logger.info(f"📥 Linha {line_count}: {line[:300]}")
+                    
+                    # Tentar parsear como JSON
+                    try:
+                        data = json.loads(line)
+                        event_type = data.get("event")
+                        event_data = data.get("data", {})
+                        
+                        logger.info(f"✅ JSON parseado - Event: '{event_type}', Data keys: {list(event_data.keys())}")
+                        
+                        # Extrair thread_id
+                        if "thread_id" in event_data:
+                            thread_id = event_data["thread_id"]
+                            logger.info(f"🔗 Thread ID: {thread_id}")
+                        
+                        # Tentar extrair mensagem de TODOS os campos possíveis
+                        extracted = False
+                        
+                        # Campo 'message'
+                        if "message" in event_data:
+                            msg = event_data["message"]
+                            logger.info(f"📝 Campo 'message' encontrado, tipo: {type(msg).__name__}")
+                            if isinstance(msg, str):
+                                agent_message = msg
+                                extracted = True
+                                logger.info(f"✅ Mensagem extraída (string): {msg[:100]}...")
+                            elif isinstance(msg, dict):
+                                logger.info(f"   Keys do message: {list(msg.keys())}")
+                                if "content" in msg:
+                                    content = msg["content"]
+                                    if isinstance(content, str):
+                                        agent_message = content
+                                        extracted = True
+                                        logger.info(f"✅ Mensagem extraída de message.content (string)")
+                                    elif isinstance(content, list):
+                                        for item in content:
+                                            if isinstance(item, dict) and "text" in item:
+                                                agent_message += item["text"]
+                                                extracted = True
+                                        if extracted:
+                                            logger.info(f"✅ Mensagem extraída de message.content (list)")
+                        
+                        # Campo 'content' direto
+                        if "content" in event_data and not extracted:
+                            content = event_data["content"]
+                            logger.info(f"📝 Campo 'content' encontrado, tipo: {type(content).__name__}")
+                            if isinstance(content, str):
+                                agent_message = content
+                                extracted = True
+                                logger.info(f"✅ Mensagem extraída de content (string)")
+                            elif isinstance(content, list):
+                                for item in content:
+                                    if isinstance(item, dict) and "text" in item:
+                                        agent_message += item["text"]
+                                        extracted = True
+                                if extracted:
+                                    logger.info(f"✅ Mensagem extraída de content (list)")
+                        
+                        # Campo 'delta'
+                        if "delta" in event_data:
+                            delta = event_data["delta"]
+                            logger.info(f"📝 Campo 'delta' encontrado, tipo: {type(delta).__name__}")
+                            if isinstance(delta, str):
+                                agent_message += delta
+                                extracted = True
+                                logger.info(f"✅ Delta adicionado (string)")
+                            elif isinstance(delta, dict):
+                                if "content" in delta:
                                     if isinstance(delta["content"], list):
                                         for item in delta["content"]:
                                             if isinstance(item, dict) and "text" in item:
                                                 agent_message += item["text"]
+                                                extracted = True
+                                        if extracted:
+                                            logger.info(f"✅ Delta adicionado de delta.content (list)")
+                        
+                        if not extracted and event_type not in ["done", "error"]:
+                            logger.warning(f"⚠️ Nenhuma mensagem extraída deste evento. Data completo: {json.dumps(event_data)[:500]}")
+                        
+                        # Eventos de controle
+                        if event_type == "done":
+                            logger.info("🏁 Evento 'done' recebido - streaming concluído")
+                            done_received = True
+                            break
+                        
+                        elif event_type == "error":
+                            error_msg = event_data.get("error", "Erro desconhecido")
+                            logger.error(f"❌ Erro no streaming: {error_msg}")
+                            raise Exception(f"Erro do agente: {error_msg}")
                             
-                            elif event_type in ["message.complete", "answer"]:
-                                if "message" in event_data:
-                                    msg = event_data["message"]
-                                    if isinstance(msg, str):
-                                        agent_message = msg
-                                    elif isinstance(msg, dict) and "content" in msg:
-                                        if isinstance(msg["content"], str):
-                                            agent_message = msg["content"]
-                                        elif isinstance(msg["content"], list):
-                                            for item in msg["content"]:
-                                                if isinstance(item, dict) and "text" in item:
-                                                    agent_message += item["text"]
-                            
-                            elif event_type == "done":
-                                logger.info("Evento 'done' recebido")
-                                done_received = True
-                                break
-                            
-                            elif event_type == "error":
-                                error_msg = event_data.get("error", "Erro desconhecido")
-                                logger.error(f"Erro no streaming: {error_msg}")
-                                raise Exception(f"Erro do agente: {error_msg}")
-                                
-                        except json.JSONDecodeError:
-                            pass
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"⚠️ Linha não é JSON válido: {e}")
                 
-                logger.info(f"Loop finalizado. Done: {done_received}, Message length: {len(agent_message)}")
+                logger.info(f"🔚 Loop finalizado. Linhas processadas: {line_count}")
+                logger.info(f"   Done received: {done_received}")
+                logger.info(f"   Message length: {len(agent_message)}")
                         
             except Exception as e:
-                logger.error(f"Erro no loop de streaming: {e}", exc_info=True)
+                logger.error(f"💥 Erro no loop de streaming: {e}", exc_info=True)
             finally:
                 response.close()
             
             if not done_received:
-                logger.warning("Streaming finalizado sem receber evento 'done'")
+                logger.warning("⚠️ Streaming finalizado sem receber evento 'done'")
             
             if not agent_message:
-                logger.warning("Nenhuma mensagem recebida do streaming")
+                logger.error("❌ CRÍTICO: Nenhuma mensagem capturada do streaming!")
+                logger.error(f"   Done received: {done_received}")
+                logger.error(f"   Thread ID: {thread_id}")
+                logger.error(f"   Linhas processadas: {line_count}")
                 agent_message = "Desculpe, não recebi resposta do agente."
-            
-            logger.info(f"Mensagem recebida com sucesso. Thread ID: {thread_id}")
-            logger.info(f"Resposta: {agent_message[:100]}...")
+            else:
+                logger.info(f"✅ Mensagem capturada com sucesso!")
+                logger.info(f"   Tamanho: {len(agent_message)} caracteres")
+                logger.info(f"   Thread ID: {thread_id}")
+                logger.info(f"   Resposta: {agent_message[:200]}...")
             
             return {
                 "session_id": thread_id,

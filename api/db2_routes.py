@@ -23,7 +23,7 @@ db2_service = Db2Service(
     security=settings.db2_security
 )
 
-logger.info("Db2 Service inicializado com driver nativo ibm_db")
+logger.info("Db2 Service inicializado com driver nativo (requer Docker linux/amd64)")
 
 
 @router.get("/buscar", operation_id="buscar_termo")

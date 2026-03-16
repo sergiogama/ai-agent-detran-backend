@@ -19,8 +19,7 @@ from models import (
     HealthResponse,
     ErrorResponse
 )
-from services import COSService, OrchestrateService, Db2ServiceRest
-from services.db2_service import Db2Service
+from services import COSService, OrchestrateService, Db2Service
 from api import db2_router
 from api.auth_routes import router as auth_router
 from api.chat_routes import router as chat_router
@@ -82,10 +81,10 @@ if all([settings.orchestrate_api_url, settings.orchestrate_api_key, settings.orc
 else:
     logger.warning("Orchestrate Service não configurado - variáveis de ambiente ausentes")
 
-# Inicializar Db2 REST se configurado
+# Inicializar Db2 com driver nativo se configurado
 if all([settings.db2_hostname, settings.db2_database, settings.db2_username, settings.db2_password]):
     try:
-        db2_service = Db2ServiceRest(
+        db2_service = Db2Service(
             hostname=settings.db2_hostname,
             port=settings.db2_port,
             database=settings.db2_database,
@@ -93,11 +92,11 @@ if all([settings.db2_hostname, settings.db2_database, settings.db2_username, set
             password=settings.db2_password,
             security=settings.db2_security
         )
-        logger.info("Db2 REST Service inicializado com sucesso")
+        logger.info("Db2 Service inicializado com driver nativo")
     except Exception as e:
-        logger.warning(f"Não foi possível inicializar Db2 REST Service: {e}")
+        logger.warning(f"Não foi possível inicializar Db2 Service: {e}")
 else:
-    logger.warning("Db2 REST Service não configurado - variáveis de ambiente ausentes")
+    logger.warning("Db2 Service não configurado - variáveis de ambiente ausentes")
 
 # Inicializar Auth Service com Db2 nativo (do db2_router)
 auth_service_instance = None

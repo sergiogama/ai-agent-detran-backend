@@ -7,7 +7,7 @@ python-multipart>=0.0.6
 ibm-cos-sdk>=2.13.4
 
 # IBM Db2 Warehouse
-ibm-db==3.2.3
+ibm-db==3.2.3  # Requer Docker com platform: linux/amd64
 
 # Requests (necessário antes do Watsonx)
 requests>=2.31.0
