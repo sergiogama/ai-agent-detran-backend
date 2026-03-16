@@ -71,9 +71,17 @@ class ChatService:
                     raise ValueError("user_cpf é necessário para nova conversa")
                 conversation_id = self.create_conversation(user_cpf)
 
-            # Verifica se conversa existe
+            # Verifica se conversa existe, se não, recria (tolerante a perda de memória em serverless)
             if conversation_id not in conversations:
-                raise ValueError(f"Conversa não encontrada: {conversation_id}")
+                logger.warning(f"Conversa {conversation_id} não encontrada em memória - recriando (provável cold start)")
+                if not user_cpf:
+                    raise ValueError("user_cpf é necessário para recriar conversa")
+                conversations[conversation_id] = {
+                    "id": conversation_id,
+                    "user_cpf": user_cpf,
+                    "messages": [],
+                    "created_at": datetime.now().isoformat(),
+                }
 
             # Obter CPF do usuário
             current_user_cpf = user_cpf or conversations[conversation_id]["user_cpf"]

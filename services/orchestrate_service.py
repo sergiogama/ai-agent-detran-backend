@@ -148,7 +148,7 @@ class OrchestrateService:
             thread_id = session_id
             done_received = False
             last_data_time = time.time()
-            idle_timeout = 90  # 90 segundos sem dados para acomodar cold start do serverless
+            idle_timeout = 150  # 2.5 minutos para acomodar cold start completo do serverless
             
             logger.info("Iniciando processamento do streaming...")
             
@@ -189,10 +189,54 @@ class OrchestrateService:
                                     if "text" in content_item:
                                         agent_message += content_item["text"]
                         
+                        elif event_type == "message.complete" or event_type == "answer":
+                            # Mensagem completa recebida
+                            logger.info(f"Evento '{event_type}' recebido - extraindo mensagem completa")
+                            
+                            # Tentar extrair mensagem de diferentes estruturas
+                            if "message" in event_data:
+                                msg = event_data["message"]
+                                if isinstance(msg, str):
+                                    agent_message = msg
+                                elif isinstance(msg, dict):
+                                    if "content" in msg:
+                                        if isinstance(msg["content"], str):
+                                            agent_message = msg["content"]
+                                        elif isinstance(msg["content"], list) and len(msg["content"]) > 0:
+                                            content_item = msg["content"][0]
+                                            if isinstance(content_item, dict) and "text" in content_item:
+                                                agent_message = content_item["text"]
+                            
+                            # Também verificar em 'content' direto
+                            elif "content" in event_data:
+                                content = event_data["content"]
+                                if isinstance(content, str):
+                                    agent_message = content
+                                elif isinstance(content, list) and len(content) > 0:
+                                    if isinstance(content[0], dict) and "text" in content[0]:
+                                        agent_message = content[0]["text"]
+                            
+                            logger.info(f"Mensagem extraída: {agent_message[:100]}...")
+                        
                         elif event_type == "done":
-                            # Fim do streaming
-                            logger.info("Evento 'done' recebido - streaming concluído")
+                            # Fim do streaming - verificar se há mensagem no evento done
+                            logger.info("Evento 'done' recebido")
+                            
+                            # Às vezes a mensagem vem no evento done
+                            if "message" in event_data and not agent_message:
+                                msg = event_data["message"]
+                                if isinstance(msg, str):
+                                    agent_message = msg
+                                elif isinstance(msg, dict) and "content" in msg:
+                                    if isinstance(msg["content"], str):
+                                        agent_message = msg["content"]
+                                    elif isinstance(msg["content"], list) and len(msg["content"]) > 0:
+                                        content_item = msg["content"][0]
+                                        if isinstance(content_item, dict) and "text" in content_item:
+                                            agent_message = content_item["text"]
+                            
                             done_received = True
+                            logger.info("Streaming concluído")
                             break
                         
                         elif event_type == "error":
