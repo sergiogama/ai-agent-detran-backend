@@ -148,7 +148,7 @@ class OrchestrateService:
             thread_id = session_id
             done_received = False
             last_data_time = time.time()
-            idle_timeout = 5  # 5 segundos sem dados = fim do streaming (aumentado para cold start)
+            idle_timeout = 90  # 90 segundos sem dados para acomodar cold start do serverless
             
             logger.info("Iniciando processamento do streaming...")
             
