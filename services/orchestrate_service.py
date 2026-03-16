@@ -93,7 +93,7 @@ class OrchestrateService:
         context: Optional[Dict] = None
     ) -> Dict:
         """
-        Envia uma mensagem para o agente usando a API /v1/agents/{agent_id}/chat com streaming
+        Envia uma mensagem para o agente usando a API /api/v1/orchestrate/{agent_id}/chat/completions
         
         Args:
             message: Mensagem do usuário
@@ -104,22 +104,33 @@ class OrchestrateService:
             Resposta do agente
         """
         try:
-            url = f"{self.api_url}/v1/agents/{self.agent_id}/chat"
+            url = f"{self.api_url}/api/v1/orchestrate/{self.agent_id}/chat/completions"
             
-            # Construir payload conforme documentação da API de Chat
+            # Construir payload conforme documentação
             payload = {
                 "messages": [
                     {
                         "role": "user",
-                        "content": message
+                        "content": [
+                            {
+                                "response_type": "text",
+                                "text": message
+                            }
+                        ]
                     }
                 ],
                 "stream": True
             }
             
-            # Adicionar session_id se fornecido
+            # Adicionar contexto se fornecido
+            if context:
+                payload["context"] = context
+            
+            # Session ID é gerenciado automaticamente pela API
             if session_id:
-                payload["session_id"] = session_id
+                if "context" not in payload:
+                    payload["context"] = {}
+                payload["context"]["session_id"] = session_id
             
             # Log do CPF do usuário (sem modificar a mensagem)
             if context and "user_cpf" in context:
