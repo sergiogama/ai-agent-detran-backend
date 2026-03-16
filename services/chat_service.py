@@ -66,14 +66,43 @@ class ChatService:
         """
         try:
             # Cria nova conversa se necessário
+            is_new_conversation = False
             if not conversation_id:
                 if not user_cpf:
                     raise ValueError("user_cpf é necessário para nova conversa")
                 conversation_id = self.create_conversation(user_cpf)
+                is_new_conversation = True
 
             # Verifica se conversa existe
             if conversation_id not in conversations:
                 raise ValueError(f"Conversa não encontrada: {conversation_id}")
+
+            # Obter CPF do usuário
+            current_user_cpf = user_cpf or conversations[conversation_id]["user_cpf"]
+            
+            # Se é nova conversa, enviar CPF primeiro de forma transparente
+            if is_new_conversation:
+                logger.info(f"Nova conversa - enviando CPF do usuário automaticamente: {current_user_cpf}")
+                
+                # Enviar CPF como primeira mensagem (não salvar no histórico visível)
+                cpf_message = f"Meu CPF é {current_user_cpf}"
+                
+                if not self.orchestrate_service:
+                    error_msg = "Orchestrate Service não está configurado. Configure as variáveis de ambiente."
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
+                
+                # Enviar CPF para identificar o usuário
+                cpf_response = self.orchestrate_service.send_message(
+                    message=cpf_message,
+                    session_id=None,
+                    context=None
+                )
+                
+                # Salvar thread_id retornado
+                if cpf_response.get("session_id"):
+                    conversations[conversation_id]["orchestrate_thread_id"] = cpf_response["session_id"]
+                    logger.info(f"Thread ID criado: {cpf_response['session_id']}")
 
             # Adiciona mensagem do usuário ao histórico
             user_message = {
@@ -91,19 +120,13 @@ class ChatService:
             
             logger.info(f"Enviando mensagem para Orchestrate: {message[:50]}...")
             
-            # Obter ou criar thread_id do Orchestrate
+            # Obter thread_id do Orchestrate
             orchestrate_thread_id = conversations[conversation_id].get("orchestrate_thread_id")
-            
-            # Adicionar contexto do usuário
-            context = {
-                "user_cpf": user_cpf or conversations[conversation_id]["user_cpf"],
-                "conversation_id": conversation_id
-            }
             
             orchestrate_response = self.orchestrate_service.send_message(
                 message=message,
                 session_id=orchestrate_thread_id,
-                context=context
+                context=None
             )
             
             # Salvar thread_id retornado pelo Orchestrate
