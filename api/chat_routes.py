@@ -3,10 +3,11 @@ Rotas de Chat
 Endpoints para interação com o agente Detran
 """
 
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Response
 from pydantic import BaseModel
 from typing import Optional
 import logging
+import time
 
 from services.chat_service import ChatService
 
@@ -60,7 +61,9 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
 
 @router.post("/message", response_model=dict)
 async def send_message(
-    request: MessageRequest, authorization: Optional[str] = Header(None)
+    request: MessageRequest,
+    response: Response,
+    authorization: Optional[str] = Header(None)
 ):
     """
     Envia uma mensagem para o agente
@@ -75,23 +78,38 @@ async def send_message(
     Raises:
         HTTPException: Se não autenticado ou erro no processamento
     """
+    # Timestamp 1: Requisição recebida
+    t1_request = time.time()
+    
     try:
         # Verifica autenticação
         user = get_current_user(authorization)
         user_cpf = user.get("cpf")
+        
+        # Timestamp 2: Após autenticação
+        t2_auth = time.time()
 
         logger.info(
             f"Mensagem recebida de {user_cpf}: {len(request.message)} caracteres"
         )
 
         # Envia mensagem para o agente
-        response = chat_service.send_message(
+        result = chat_service.send_message(
             message=request.message,
             conversation_id=request.conversation_id,
             user_cpf=user_cpf,
         )
+        
+        # Timestamp 3: Após chamada do agente
+        t3_agent = time.time()
+        
+        # Adicionar headers com timestamps (em milissegundos)
+        response.headers["X-Timing-Request"] = str(int(t1_request * 1000))
+        response.headers["X-Timing-Auth"] = str(int((t2_auth - t1_request) * 1000))
+        response.headers["X-Timing-Agent"] = str(int((t3_agent - t2_auth) * 1000))
+        response.headers["X-Timing-Total"] = str(int((t3_agent - t1_request) * 1000))
 
-        return response
+        return result
 
     except HTTPException:
         raise
