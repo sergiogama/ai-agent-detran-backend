@@ -26,9 +26,9 @@ db2_service = Db2Service(
 logger.info("Db2 Service inicializado com driver nativo ibm_db")
 
 
-@router.get("/search")
-async def search(
-    termo: str = Query(..., description="Placa, CPF ou CNH para buscar")
+@router.get("/buscar")
+async def buscar_termo(
+    termo: str = Query(..., description="Faz busca por Placa, CPF ou CNH")
 ):
     """
     Busca genérica por placa, CPF ou CNH
@@ -54,10 +54,10 @@ async def search(
         raise HTTPException(status_code=500, detail=f"Erro na busca: {str(e)}")
 
 
-@router.get("/condutor/cpf/{cpf}", operation_id="get_condutor_by_cpf")
-async def get_condutor_by_cpf(cpf: str):
+@router.get("/condutor/cpf/{cpf}")
+async def buscar_condutor_por_cpf(cpf: str):
     """
-    Busca condutor por CPF
+    Busca dados completos de um condutor pelo CPF
     
     Args:
         cpf: CPF do condutor (11 dígitos)
@@ -80,10 +80,10 @@ async def get_condutor_by_cpf(cpf: str):
         raise HTTPException(status_code=500, detail=f"Erro ao buscar condutor: {str(e)}")
 
 
-@router.get("/condutor/id/{id_condutor}", operation_id="get_condutor_by_id")
-async def get_condutor_by_id(id_condutor: int):
+@router.get("/condutor/id/{id_condutor}")
+async def buscar_condutor_por_id(id_condutor: int):
     """
-    Busca condutor por ID
+    Busca dados completos de um condutor pelo ID
     
     Args:
         id_condutor: ID do condutor
@@ -107,10 +107,10 @@ async def get_condutor_by_id(id_condutor: int):
         raise HTTPException(status_code=500, detail=f"Erro ao buscar condutor: {str(e)}")
 
 
-@router.get("/condutor/cnh/{cnh}", operation_id="get_condutor_by_cnh")
-async def get_condutor_by_cnh(cnh: str):
+@router.get("/condutor/cnh/{cnh}")
+async def buscar_condutor_por_cnh(cnh: str):
     """
-    Busca condutor por CNH
+    Busca dados completos de um condutor pelo número da CNH
     
     Args:
         cnh: Número da CNH (11 dígitos)
@@ -134,10 +134,10 @@ async def get_condutor_by_cnh(cnh: str):
         raise HTTPException(status_code=500, detail=f"Erro ao buscar condutor: {str(e)}")
 
 
-@router.get("/veiculo/placa/{placa}", operation_id="get_veiculo_by_placa")
-async def get_veiculo_by_placa(placa: str):
+@router.get("/veiculo/placa/{placa}")
+async def buscar_veiculo_por_placa(placa: str):
     """
-    Busca veículo por placa
+    Busca dados completos de um veículo pela placa
     
     Args:
         placa: Placa do veículo (7 caracteres)
@@ -160,8 +160,8 @@ async def get_veiculo_by_placa(placa: str):
         raise HTTPException(status_code=500, detail=f"Erro ao buscar veículo: {str(e)}")
 
 
-@router.get("/multas/veiculo/{placa}", operation_id="get_multas_veiculo")
-async def get_multas_veiculo(
+@router.get("/multas/veiculo/{placa}")
+async def listar_multas_veiculo(
     placa: str,
     apenas_pendentes: bool = Query(False, description="Retornar apenas multas pendentes")
 ):
@@ -195,10 +195,10 @@ async def get_multas_veiculo(
         raise HTTPException(status_code=500, detail=f"Erro ao buscar multas: {str(e)}")
 
 
-@router.get("/multas/condutor/{cpf}", operation_id="get_multas_condutor")
-async def get_multas_condutor(cpf: str):
+@router.get("/multas/condutor/{cpf}")
+async def listar_multas_condutor(cpf: str):
     """
-    Lista multas de um condutor
+    Lista todas as multas de um condutor pelo CPF
     
     Args:
         cpf: CPF do condutor
@@ -220,8 +220,8 @@ async def get_multas_condutor(cpf: str):
         raise HTTPException(status_code=500, detail=f"Erro ao buscar multas: {str(e)}")
 
 
-@router.get("/licenciamento/{placa}", operation_id="get_licenciamento")
-async def get_licenciamento(
+@router.get("/licenciamento/{placa}")
+async def obter_licenciamento(
     placa: str,
     ano: Optional[int] = Query(None, description="Ano do licenciamento")
 ):
@@ -253,10 +253,10 @@ async def get_licenciamento(
         raise HTTPException(status_code=500, detail=f"Erro ao buscar licenciamento: {str(e)}")
 
 
-@router.get("/situacao/condutor/{cpf}", operation_id="get_situacao_condutor")
-async def get_situacao_condutor(cpf: str):
+@router.get("/situacao/condutor/{cpf}")
+async def obter_situacao_condutor(cpf: str):
     """
-    Obtém situação geral de um condutor
+    Obtém a situação geral de um condutor (CNH, pontos, multas, etc)
     
     Args:
         cpf: CPF do condutor
@@ -279,10 +279,10 @@ async def get_situacao_condutor(cpf: str):
         raise HTTPException(status_code=500, detail=f"Erro ao buscar situação: {str(e)}")
 
 
-@router.get("/situacao/licenciamento/{placa}", operation_id="get_situacao_licenciamento")
-async def get_situacao_licenciamento(placa: str):
+@router.get("/situacao/licenciamento/{placa}")
+async def obter_situacao_licenciamento(placa: str):
     """
-    Obtém situação de licenciamento de um veículo
+    Obtém a situação atual do licenciamento de um veículo
     
     Args:
         placa: Placa do veículo
