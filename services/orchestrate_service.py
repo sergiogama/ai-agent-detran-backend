@@ -132,13 +132,13 @@ class OrchestrateService:
             logger.info(f"Enviando mensagem para Orchestrate com streaming: {message[:50]}...")
             logger.info(f"Agent ID: {self.agent_id}")
             
-            # Timeout maior para ambientes serverless (cold start pode levar 60s+)
-            # Code Engine: cold start ~50-60s + processamento ~10-30s = 180s total
+            # Timeout reduzido - sem cold start (min instances = 1)
+            # Watsonx Orchestrate normalmente responde em 5-15 segundos
             response = requests.post(
                 url,
                 json=payload,
                 headers=self._get_headers(),
-                timeout=180,  # 3 minutos para cold start + processamento
+                timeout=30,  # 30s é suficiente sem cold start
                 stream=True
             )
             
@@ -150,7 +150,7 @@ class OrchestrateService:
             thread_id = session_id
             done_received = False
             last_data_time = time.time()
-            idle_timeout = 200  # 200s para tolerar cold start em serverless
+            idle_timeout = 45  # 45s idle timeout (sem cold start)
             line_count = 0
             
             logger.info("🚀 Iniciando processamento do streaming...")
