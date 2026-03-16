@@ -145,40 +145,58 @@ class OrchestrateService:
             # Processar resposta em streaming (JSON lines)
             agent_message = ""
             thread_id = session_id
+            done_received = False
             
-            for line in response.iter_lines():
-                if line:
-                    line_str = line.decode('utf-8')
-                    try:
-                        data = json.loads(line_str)
-                        event_type = data.get("event")
-                        event_data = data.get("data", {})
+            logger.info("Iniciando processamento do streaming...")
+            
+            for line in response.iter_lines(decode_unicode=True):
+                if not line:
+                    continue
+                    
+                try:
+                    data = json.loads(line)
+                    event_type = data.get("event")
+                    event_data = data.get("data", {})
+                    
+                    logger.debug(f"Evento recebido: {event_type}")
+                    
+                    # Extrair thread_id
+                    if "thread_id" in event_data:
+                        thread_id = event_data["thread_id"]
+                    
+                    # Processar eventos
+                    if event_type == "message.delta":
+                        # Acumular deltas de mensagem
+                        delta = event_data.get("delta", "")
+                        # Delta pode ser string ou dict com estrutura complexa
+                        if isinstance(delta, str):
+                            agent_message += delta
+                        elif isinstance(delta, dict):
+                            # Extrair texto de estrutura: {'role': 'assistant', 'content': [{'text': '...'}]}
+                            if "content" in delta and isinstance(delta["content"], list) and len(delta["content"]) > 0:
+                                content_item = delta["content"][0]
+                                if "text" in content_item:
+                                    agent_message += content_item["text"]
+                    
+                    elif event_type == "done":
+                        # Fim do streaming
+                        logger.info("Evento 'done' recebido - streaming concluído")
+                        done_received = True
+                        break
+                    
+                    elif event_type == "error":
+                        # Erro no streaming
+                        error_msg = event_data.get("error", "Erro desconhecido")
+                        logger.error(f"Erro no streaming: {error_msg}")
+                        raise Exception(f"Erro do agente: {error_msg}")
                         
-                        # Extrair thread_id
-                        if "thread_id" in event_data:
-                            thread_id = event_data["thread_id"]
-                        
-                        # Processar eventos
-                        if event_type == "message.delta":
-                            # Acumular deltas de mensagem
-                            delta = event_data.get("delta", "")
-                            # Delta pode ser string ou dict com estrutura complexa
-                            if isinstance(delta, str):
-                                agent_message += delta
-                            elif isinstance(delta, dict):
-                                # Extrair texto de estrutura: {'role': 'assistant', 'content': [{'text': '...'}]}
-                                if "content" in delta and isinstance(delta["content"], list) and len(delta["content"]) > 0:
-                                    content_item = delta["content"][0]
-                                    if "text" in content_item:
-                                        agent_message += content_item["text"]
-                            
-                        elif event_type == "done":
-                            # Fim do streaming
-                            logger.info("Streaming concluído")
-                            break
-                            
-                    except json.JSONDecodeError as e:
-                        logger.warning(f"Erro ao decodificar JSON: {e}, linha: {line_str[:100]}")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Erro ao decodificar JSON: {e}, linha: {line[:100]}")
+                except Exception as e:
+                    logger.error(f"Erro ao processar linha do streaming: {e}")
+            
+            if not done_received:
+                logger.warning("Streaming finalizado sem receber evento 'done'")
             
             if not agent_message:
                 logger.warning("Nenhuma mensagem recebida do streaming")
