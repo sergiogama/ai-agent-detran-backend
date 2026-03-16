@@ -132,12 +132,13 @@ class OrchestrateService:
             logger.info(f"Enviando mensagem para Orchestrate com streaming: {message[:50]}...")
             logger.info(f"Agent ID: {self.agent_id}")
             
-            # Timeout aumentado para suportar tools lentas
+            # Timeout aumentado para suportar tools lentas do DB2
+            # Vimos que pode levar até 32s, então usamos 90s com margem
             response = requests.post(
                 url,
                 json=payload,
                 headers=self._get_headers(),
-                timeout=60,  # 60s para tools do DB2
+                timeout=90,  # 90s para tools do DB2 (32s observado + margem)
                 stream=False  # Receber resposta completa
             )
             
