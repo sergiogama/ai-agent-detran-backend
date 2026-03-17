@@ -104,6 +104,11 @@ class OrchestrateService:
             Resposta do agente
         """
         try:
+            import time
+            
+            # Timestamp 1: Início
+            t1_start = time.time()
+            
             url = f"{self.api_url}/v1/orchestrate/runs?stream=true"
             
             # Construir payload conforme documentação
@@ -132,6 +137,9 @@ class OrchestrateService:
             logger.info(f"Enviando mensagem para Orchestrate com streaming: {message[:50]}...")
             logger.info(f"Agent ID: {self.agent_id}")
             
+            # Timestamp 2: Antes da chamada HTTP
+            t2_before_http = time.time()
+            
             # Timeout aumentado para suportar tools lentas do DB2
             # Langfuse mostra 91s (0.67s latency + 90s tools), então usamos 120s com margem
             response = requests.post(
@@ -141,6 +149,9 @@ class OrchestrateService:
                 timeout=120,  # 120s para tools do DB2 (91s observado no Langfuse + margem)
                 stream=False  # Receber resposta completa
             )
+            
+            # Timestamp 3: Após receber resposta HTTP
+            t3_after_http = time.time()
             
             logger.info(f"Status da resposta: {response.status_code}")
             response.raise_for_status()
@@ -200,11 +211,25 @@ class OrchestrateService:
                 logger.info(f"   Thread ID: {thread_id}")
                 logger.info(f"   Resposta: {agent_message[:200]}...")
             
+            # Timestamp 4: Fim do processamento
+            t4_end = time.time()
+            
+            # Calcular tempos (em milissegundos)
+            timing = {
+                "preparation_ms": int((t2_before_http - t1_start) * 1000),
+                "http_call_ms": int((t3_after_http - t2_before_http) * 1000),
+                "processing_ms": int((t4_end - t3_after_http) * 1000),
+                "total_ms": int((t4_end - t1_start) * 1000)
+            }
+            
+            logger.info(f"⏱️  Timing - Prep: {timing['preparation_ms']}ms | HTTP: {timing['http_call_ms']}ms | Process: {timing['processing_ms']}ms | Total: {timing['total_ms']}ms")
+            
             return {
                 "session_id": thread_id,
                 "message": agent_message,
                 "metadata": {},
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "timing": timing
             }
             
         except requests.exceptions.RequestException as e:

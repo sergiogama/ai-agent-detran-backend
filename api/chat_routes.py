@@ -108,6 +108,14 @@ async def send_message(
         response.headers["X-Timing-Auth"] = str(int((t2_auth - t1_request) * 1000))
         response.headers["X-Timing-Agent"] = str(int((t3_agent - t2_auth) * 1000))
         response.headers["X-Timing-Total"] = str(int((t3_agent - t1_request) * 1000))
+        
+        # Adicionar timing detalhado do Orchestrate se disponível
+        if "timing" in result:
+            timing = result["timing"]
+            response.headers["X-Orchestrate-Prep"] = str(timing.get("preparation_ms", 0))
+            response.headers["X-Orchestrate-HTTP"] = str(timing.get("http_call_ms", 0))
+            response.headers["X-Orchestrate-Process"] = str(timing.get("processing_ms", 0))
+            response.headers["X-Orchestrate-Total"] = str(timing.get("total_ms", 0))
 
         return result
 
