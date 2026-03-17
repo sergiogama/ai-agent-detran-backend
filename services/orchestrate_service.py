@@ -141,12 +141,13 @@ class OrchestrateService:
             t2_before_http = time.time()
             
             # Timeout aumentado para suportar tools lentas do DB2
-            # Observado: até 152s em produção, então usamos 180s com margem de segurança
+            # Observado: até 152s em produção, então usamos 240s (4 minutos) com margem
+            # timeout=(connect_timeout, read_timeout) - read_timeout se aplica a cada chunk
             response = requests.post(
                 url,
                 json=payload,
                 headers=self._get_headers(),
-                timeout=180,  # 180s (3 minutos) para tools do DB2 (152s observado + margem)
+                timeout=(30, 240),  # (30s connect, 240s read) - 4 minutos para cada chunk do streaming
                 stream=True  # Streaming para processar linha por linha
             )
             
@@ -181,8 +182,9 @@ class OrchestrateService:
                         event_type = event_data.get("event", "")
                         data = event_data.get("data", {})
                         
-                        # Log detalhado para debug
-                        logger.info(f"📦 Linha {line_count}: event='{event_type}', data_keys={list(data.keys())}")
+                        # Log apenas eventos importantes (não todos os deltas)
+                        if event_type not in ["message.delta"]:
+                            logger.info(f"📦 Event: '{event_type}', data_keys={list(data.keys())}")
                         
                         # Extrair thread_id se disponível
                         if "thread_id" in data and not thread_id:
@@ -194,50 +196,38 @@ class OrchestrateService:
                             # Acumular deltas da mensagem (formato: data.delta.content[].text)
                             if "delta" in data:
                                 delta = data["delta"]
-                                logger.info(f"   📝 delta type: {type(delta)}, keys: {list(delta.keys()) if isinstance(delta, dict) else 'N/A'}")
                                 if isinstance(delta, dict) and "content" in delta:
                                     content = delta["content"]
-                                    logger.info(f"   📝 content type: {type(content)}")
                                     if isinstance(content, list):
                                         for item in content:
                                             if isinstance(item, dict) and "text" in item:
-                                                text_chunk = item["text"]
-                                                agent_message += text_chunk
-                                                logger.info(f"   ➕ Adicionado chunk: {text_chunk[:50]}...")
+                                                agent_message += item["text"]
                                     elif isinstance(content, str):
                                         agent_message += content
-                                        logger.info(f"   ➕ Adicionado string: {content[:50]}...")
                         
                         elif event_type == "message.created":
                             # Mensagem completa criada (formato: data.message.content[].text)
                             if "message" in data:
                                 msg = data["message"]
-                                logger.info(f"   ✅ message.created - type: {type(msg)}, keys: {list(msg.keys()) if isinstance(msg, dict) else 'N/A'}")
                                 if isinstance(msg, dict) and "content" in msg:
                                     content = msg["content"]
-                                    logger.info(f"   ✅ content type: {type(content)}")
                                     if isinstance(content, list):
                                         # Limpar mensagem anterior e usar a versão completa
                                         agent_message = ""
                                         for item in content:
                                             if isinstance(item, dict) and "text" in item:
                                                 agent_message += item["text"]
-                                        logger.info(f"   ✅ Mensagem final: {agent_message[:100]}...")
                                     elif isinstance(content, str):
                                         agent_message = content
-                                        logger.info(f"   ✅ Mensagem final (string): {agent_message[:100]}...")
                             logger.info(f"✅ Mensagem completa recebida (len={len(agent_message)})")
                         
                         elif event_type == "done":
                             logger.info("✅ Streaming concluído")
                             break
                             
-                    except json.JSONDecodeError as e:
-                        # Linha não é JSON válido, ignorar
-                        logger.warning(f"⚠️  Linha {line_count} não é JSON válido: {line_str[:100]}")
+                    except json.JSONDecodeError:
+                        # Linha não é JSON válido, ignorar silenciosamente
                         continue
-                
-                logger.info(f"📊 Total de linhas processadas: {line_count}")
                         
             except Exception as e:
                 logger.error(f"💥 Erro ao processar streaming: {e}", exc_info=True)
