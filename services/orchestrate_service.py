@@ -133,12 +133,12 @@ class OrchestrateService:
             logger.info(f"Agent ID: {self.agent_id}")
             
             # Timeout aumentado para suportar tools lentas do DB2
-            # Vimos que pode levar até 32s, então usamos 90s com margem
+            # Langfuse mostra 91s (0.67s latency + 90s tools), então usamos 120s com margem
             response = requests.post(
                 url,
                 json=payload,
                 headers=self._get_headers(),
-                timeout=90,  # 90s para tools do DB2 (32s observado + margem)
+                timeout=120,  # 120s para tools do DB2 (91s observado no Langfuse + margem)
                 stream=False  # Receber resposta completa
             )
             
