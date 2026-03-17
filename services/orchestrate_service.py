@@ -141,13 +141,13 @@ class OrchestrateService:
             t2_before_http = time.time()
             
             # Timeout aumentado para suportar tools lentas do DB2
-            # Langfuse mostra 91s (0.67s latency + 90s tools), então usamos 120s com margem
+            # Observado: até 152s em produção, então usamos 180s com margem de segurança
             response = requests.post(
                 url,
                 json=payload,
                 headers=self._get_headers(),
-                timeout=120,  # 120s para tools do DB2 (91s observado no Langfuse + margem)
-                stream=False  # Receber resposta completa
+                timeout=180,  # 180s (3 minutos) para tools do DB2 (152s observado + margem)
+                stream=True  # Streaming para processar linha por linha
             )
             
             # Timestamp 3: Após receber resposta HTTP
@@ -156,54 +156,95 @@ class OrchestrateService:
             logger.info(f"Status da resposta: {response.status_code}")
             response.raise_for_status()
             
-            # Processar resposta completa
+            # Processar resposta em streaming (linha por linha)
             agent_message = ""
             thread_id = session_id
-            response_data = {}
             
-            logger.info("🚀 Processando resposta completa...")
+            logger.info("🚀 Processando resposta em streaming...")
             
             try:
-                # Obter resposta como JSON
-                response_data = response.json()
-                logger.info(f"📥 Resposta JSON recebida. Keys: {list(response_data.keys())}")
-                
-                # Caso 1: Resposta direta do Watsonx (formato: {"role": "assistant", "content": "..."})
-                if "role" in response_data and "content" in response_data:
-                    logger.info(f"✅ Resposta direta do Watsonx detectada")
-                    agent_message = response_data["content"]
-                    thread_id = response_data.get("thread_id", thread_id)
-                    logger.info(f"✅ Mensagem extraída (len={len(agent_message)}): {agent_message[:200]}...")
-                
-                # Caso 2: Formato com envelope
-                elif "data" in response_data:
-                    event_data = response_data.get("data", {})
-                    logger.info(f"✅ Formato com envelope - Data keys: {list(event_data.keys())}")
-                        
-                    # Extrair thread_id
-                    if "thread_id" in event_data:
-                        thread_id = event_data["thread_id"]
-                        logger.info(f"🔗 Thread ID: {thread_id}")
+                # Processar cada linha do streaming
+                line_count = 0
+                for line in response.iter_lines():
+                    if not line:
+                        continue
                     
-                    # Extrair mensagem
-                    if "message" in event_data:
-                        msg = event_data["message"]
-                        if isinstance(msg, str):
-                            agent_message = msg
-                        elif isinstance(msg, dict) and "content" in msg:
-                            agent_message = msg["content"]
-                    elif "content" in event_data:
-                        agent_message = event_data["content"]
+                    line_str = line.decode('utf-8').strip()
+                    if not line_str:
+                        continue
+                    
+                    line_count += 1
+                    
+                    try:
+                        # Parse JSON de cada linha
+                        event_data = json.loads(line_str)
+                        event_type = event_data.get("event", "")
+                        data = event_data.get("data", {})
+                        
+                        # Log detalhado para debug
+                        logger.info(f"📦 Linha {line_count}: event='{event_type}', data_keys={list(data.keys())}")
+                        
+                        # Extrair thread_id se disponível
+                        if "thread_id" in data and not thread_id:
+                            thread_id = data["thread_id"]
+                            logger.info(f"🔗 Thread ID: {thread_id}")
+                        
+                        # Processar eventos de mensagem
+                        if event_type == "message.delta":
+                            # Acumular deltas da mensagem (formato: data.delta.content[].text)
+                            if "delta" in data:
+                                delta = data["delta"]
+                                logger.info(f"   📝 delta type: {type(delta)}, keys: {list(delta.keys()) if isinstance(delta, dict) else 'N/A'}")
+                                if isinstance(delta, dict) and "content" in delta:
+                                    content = delta["content"]
+                                    logger.info(f"   📝 content type: {type(content)}")
+                                    if isinstance(content, list):
+                                        for item in content:
+                                            if isinstance(item, dict) and "text" in item:
+                                                text_chunk = item["text"]
+                                                agent_message += text_chunk
+                                                logger.info(f"   ➕ Adicionado chunk: {text_chunk[:50]}...")
+                                    elif isinstance(content, str):
+                                        agent_message += content
+                                        logger.info(f"   ➕ Adicionado string: {content[:50]}...")
+                        
+                        elif event_type == "message.created":
+                            # Mensagem completa criada (formato: data.message.content[].text)
+                            if "message" in data:
+                                msg = data["message"]
+                                logger.info(f"   ✅ message.created - type: {type(msg)}, keys: {list(msg.keys()) if isinstance(msg, dict) else 'N/A'}")
+                                if isinstance(msg, dict) and "content" in msg:
+                                    content = msg["content"]
+                                    logger.info(f"   ✅ content type: {type(content)}")
+                                    if isinstance(content, list):
+                                        # Limpar mensagem anterior e usar a versão completa
+                                        agent_message = ""
+                                        for item in content:
+                                            if isinstance(item, dict) and "text" in item:
+                                                agent_message += item["text"]
+                                        logger.info(f"   ✅ Mensagem final: {agent_message[:100]}...")
+                                    elif isinstance(content, str):
+                                        agent_message = content
+                                        logger.info(f"   ✅ Mensagem final (string): {agent_message[:100]}...")
+                            logger.info(f"✅ Mensagem completa recebida (len={len(agent_message)})")
+                        
+                        elif event_type == "done":
+                            logger.info("✅ Streaming concluído")
+                            break
+                            
+                    except json.JSONDecodeError as e:
+                        # Linha não é JSON válido, ignorar
+                        logger.warning(f"⚠️  Linha {line_count} não é JSON válido: {line_str[:100]}")
+                        continue
                 
-                logger.info(f"✅ Processamento concluído. Message length: {len(agent_message)}")
+                logger.info(f"📊 Total de linhas processadas: {line_count}")
                         
             except Exception as e:
-                logger.error(f"💥 Erro ao processar resposta: {e}", exc_info=True)
+                logger.error(f"💥 Erro ao processar streaming: {e}", exc_info=True)
             
             if not agent_message:
                 logger.error("❌ CRÍTICO: Nenhuma mensagem capturada da resposta!")
                 logger.error(f"   Thread ID: {thread_id}")
-                logger.error(f"   Response data: {json.dumps(response_data)[:500]}")
                 agent_message = "Desculpe, não recebi resposta do agente."
             else:
                 logger.info(f"✅ Mensagem capturada com sucesso!")
