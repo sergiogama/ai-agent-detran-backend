@@ -191,8 +191,8 @@ class OrchestrateService:
                             thread_id = data["thread_id"]
                             logger.info(f"🔗 Thread ID: {thread_id}")
                         
-                        # Processar eventos de mensagem
-                        if event_type == "message.delta":
+                        # Processar eventos de mensagem (message.delta ou run.step.delta)
+                        if event_type in ["message.delta", "run.step.delta"]:
                             # Acumular deltas da mensagem (formato: data.delta.content[].text)
                             if "delta" in data:
                                 delta = data["delta"]
